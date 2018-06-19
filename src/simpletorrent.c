@@ -102,12 +102,46 @@ void update_g_left(int *pieces_info)
 }
 
 
+int alloc_peer()
+{
+    int i;
+    /*for(i=0; i<MAXPEERS; i++)
+    {
+        if(peers_pool[i].used == 1 && strncmp(peer_id,peers_pool[i].id,20) == 0)
+            return -1;
+    }*/
+    for(i=0; i<MAXPEERS; i++)
+    {
+        if(peers_pool[i].used == 0)
+        {
+            peers_pool[i].used = 1;
+            return i;
+        }
+    }
+    return -1;
+}
 
-
-
-
-
-
+void init_peer(peerdata *my_peer,int pos)
+{
+    printf("my_peer id is %s\n",my_peer->id);
+    memcpy(peers_pool[pos].id,my_peer->id,21);
+    peers_pool[pos].port = my_peer->port;
+    peers_pool[pos].ip = (char *)malloc((strlen(my_peer->ip)+1)*sizeof(char));
+    memcpy(peers_pool[pos].ip,my_peer->ip,strlen(my_peer->ip));
+    peers_pool[pos].ip[strlen(my_peer->ip)] = '\0';
+    peers_pool[pos].piecesInfo = (int*)malloc(piecesNum * sizeof(int));
+    memset(peers_pool[pos].piecesInfo,0,piecesNum*sizeof(int));
+    peers_pool[pos].isSendCancel = 0; 
+}
+void destroy_peer(int pos)
+{
+    peers_pool[pos].port = 0;
+    //free(peers_pool[pos].ip);
+    peers_pool[pos].used = 0;
+    peers_pool[pos].sockfd = -1;
+    peers_pool[pos].status = 0;
+    peers_pool[pos].id[0] = '\0';
+}
 
 
 int find_in_poor(peerdata *my_peer)
