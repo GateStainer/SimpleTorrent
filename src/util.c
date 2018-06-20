@@ -8,6 +8,137 @@
 
 #include "util.h"
 
+int connect_to_host(char* ip, int port)
+{
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("Could not create socket");
+        return(-1);
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr,0,sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(ip);
+    addr.sin_port = htons((short)port);
+    printf("connect to %s:%d\n",ip,port);
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("Error connecting to socket");
+        return(-1);
+    }
+
+    return sockfd;
+}
+
+int make_listen_port(int port)
+{
+    int sockfd;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd <0)
+    {
+        perror("Could not create socket");
+        return 0;
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    int opt = 1;
+    setsockopt(sockfd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    //printf("hello\n");
+    if(bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0)
+    {
+        perror("Could not bind socket");
+        return 0;
+    }
+
+    printf("now listen\n");
+    if(listen(sockfd, 20) < 0)
+    {
+        perror("Error listening on socket");
+        return 0;
+    }
+
+    return sockfd;
+}
+
+// 计算一个打开文件的字节数
+int file_len(FILE* fp)
+{
+    int sz;
+    fseek(fp , 0 , SEEK_END);
+    sz = ftell(fp);
+    rewind (fp);
+    return sz;
+}
+
+// recvline(int fd, char **line)
+// 描述: 从套接字fd接收字符串
+// 输入: 套接字描述符fd, 将接收的行数据写入line
+// 输出: 读取的字节数
+int recvline(int fd, char **line)
+{
+    int retVal;
+    int lineIndex = 0;
+    int lineSize  = 128;
+
+    *line = (char *)malloc(sizeof(char) * lineSize);
+
+    if (*line == NULL)
+    {
+        perror("malloc");
+        return -1;
+    }
+
+    while ((retVal = read(fd, *line + lineIndex, 1)) == 1)
+    {
+        if ('\n' == (*line)[lineIndex])
+        {
+            (*line)[lineIndex] = 0;
+            break;
+        }
+
+        lineIndex += 1;
+
+        /*
+          如果获得的字符太多, 就重新分配行缓存.
+        */
+        if (lineIndex > lineSize)
+        {
+            lineSize *= 2;
+            char *newLine = realloc(*line, sizeof(char) * lineSize);
+
+            if (newLine == NULL)
+            {
+                retVal    = -1; /* realloc失败 */
+                break;
+            }
+
+            *line = newLine;
+        }
+    }
+
+    if (retVal < 0)
+    {
+        free(*line);
+        return -1;
+    }
+#ifdef NDEBUG
+    else
+    {
+        fprintf(stdout, "%03d> %s\n", fd, *line);
+    }
+#endif
+
+    return lineIndex;
+}
 
 /* End recvline */
 
