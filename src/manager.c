@@ -7,19 +7,125 @@ extern int errno;
 
 int find_piece_len(int index,int j)
 {
-    
+    int len;
+    if(j != subpiecesNum[index] - 1)
+    {
+        len = SUB_PIECE_LEN;
+    }
+    else
+    {
+        if(index != piecesNum - 1)
+        {
+            printf("piece_len is %d and filelen is %d\n",g_torrentmeta->piece_len,g_filelen);
+            len = g_torrentmeta->piece_len % SUB_PIECE_LEN;
+            if(len == 0)
+            {
+                len = SUB_PIECE_LEN;
+            }
+        }
+        else                           //最后一个分片？
+        {
+            int piece_len = g_filelen % g_torrentmeta->piece_len;
+            if(piece_len == 0)
+            {
+                piece_len = g_torrentmeta->piece_len;
+            }
+            len = piece_len % SUB_PIECE_LEN;
+            if(len == 0)
+            {
+                len = SUB_PIECE_LEN;
+            }
+        }
+    }
+    return len;
 }
 
 void sendBitField(int sockfd)
 {
-    
+    //piecesInfo = parse_data_file(g_torrentmeta, &piecesNum);
+    int bit_num = piecesNum / 8;
+    if(piecesNum % 8 != 0)
+        bit_num ++;
+    unsigned char *buffer = (unsigned char*)malloc(sizeof(int) + (1 + bit_num) * sizeof(unsigned char));
+    memset(buffer, 0, sizeof(int) + (1 + bit_num) * sizeof(unsigned char));
+    unsigned char *temp_buffer = buffer;
+
+    int len = 1 + bit_num;     //1位type值
+    len = htonl(len);
+    printf("len is %x in sendBitField\n",len);
+    memcpy(buffer, (char*)&len, 4);
+    buffer += sizeof(int);
+
+    *buffer ++ = 5;
+
+    int i = 0;
+    char bit_8 = 0x80;
+    for(; i < piecesNum; i ++)
+    {
+        if(piecesInfo[i] == 1)
+        {
+            (*buffer) = (*buffer) | bit_8;
+        }
+        bit_8 = bit_8 >> 1;
+        if((i+1) % 8 == 0)
+        {
+            buffer++;
+            bit_8 = 0x80;
+        }
+    }
+    printf("temp buffer is %x %x %x %x\n",temp_buffer[0],temp_buffer[1],temp_buffer[2],temp_buffer[3]);
+
+
+    printf("Now I will send BitField pack\n");
+    send(sockfd, temp_buffer, sizeof(int) + ntohl(len) * sizeof(unsigned char), 0);
+    free(temp_buffer);
 }
 
 void *check_and_keepalive(void *p)
 {
-
+    int k = (int)p;
+    while(1)
+    {
+        if(peers_pool[k].used == 1 && peers_pool[k].status >= 2)
+        {
+            pthread_mutex_lock(&peers_pool[k].alive_mutex);
+            if(peers_pool[k].alive == 0)
+            {
+                pthread_mutex_lock(&peers_pool[k].sock_mutex);
+                if(peers_pool[k].sockfd > 0)
+                {
+                    printf("check_and_keepalive close %d\n",peers_pool[k].sockfd);
+                    close(peers_pool[k].sockfd);
+                    peers_pool[k].sockfd = -1;
+                    peers_pool[k].status = 0;
+                }
+                pthread_mutex_unlock(&peers_pool[k].sock_mutex);
+                pthread_mutex_lock(&peers_pool[k].alive_mutex);
+                break;
+            }
+            else
+            {
+                pthread_mutex_lock(&peers_pool[k].sock_mutex);
+                if(peers_pool[k].sockfd > 0)
+                {
+                    int len = 0;
+                    printf("Now I will send keepalive pack to %s:%d\n", peers_pool[k].ip, peers_pool[k].port);
+                    send(peers_pool[k].sockfd, (char *)&len, sizeof(int), 0);
+                }
+                else
+                {
+                    pthread_mutex_unlock(&peers_pool[k].sock_mutex);
+                    pthread_mutex_lock(&peers_pool[k].alive_mutex);
+                    break;
+                }
+                pthread_mutex_unlock(&peers_pool[k].sock_mutex);
+            }
+            peers_pool[k].alive = 0;
+            pthread_mutex_unlock(&peers_pool[k].alive_mutex);
+        }
+        sleep(120);
+    }
     
-
 }
 
 void sendRequest(int k)
